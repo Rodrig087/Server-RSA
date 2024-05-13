@@ -1,0 +1,22 @@
+{
+    "dispositivo": {
+        "id": "ID"
+    },
+    "directorios": {
+        "archivos-recibidos": "/home/rsa/archivos-recibidos/",
+        "resultados-vertederos": "/home/rsa/resultados/vertederos/",
+        "resultados-coordinometros": "/home/rsa/resultados/coordinometros/",
+        "resultados-cajasMedicion": "/home/rsa/resultados/cajas-medicion/"
+    },
+    "directorios-eventos-clasificados": {
+        "eventos-aislados": "/home/rsa/registro-continuo/eventos/aislados",
+        "eventos-locales": "/home/rsa/registro-continuo/eventos/locales",
+        "eventos-sismicos": "/home/rsa/registro-continuo/eventos/simicos"
+    },
+    "drive": {
+        "archivosRecibidos": "Id-directorio",
+        "vertederos": "Id-directorio",
+        "coordinometros": "Id-directorio",
+        "cajasMedicion": "Id-directorio"
+    }
+}

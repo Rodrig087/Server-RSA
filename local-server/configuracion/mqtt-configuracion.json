@@ -1,0 +1,10 @@
+{
+    "server_address": "Ip-o-dominio",
+    "username": "rsa",
+    "password": "password",
+    "topic_publicacion": "serverpi/status",
+    "topic_promas": "promas/#",
+    "topic_chanlud": "chanlud/#",
+    "topic_registro-continuo": "registrocontinuo/eventos/#",
+    "topic_status": "status"
+}
