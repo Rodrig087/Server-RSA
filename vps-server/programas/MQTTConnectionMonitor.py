@@ -27,11 +27,21 @@ def recibir_mensajes_telegram():
 
 # Definir la función para extraer la fecha, hora y duración del payload JSON
 def procesar_mensaje(mensaje):
-    payload = json.loads(mensaje.payload)
-    id = payload["id"]
-    status = payload["status"]
-    print(f"Id: {id}, status: {status}")
-    return id, status
+    try:
+        # Intentar decodificar el payload JSON
+        payload = json.loads(mensaje.payload.decode('utf-8'))  # Asegurarse de decodificar el payload de bytes a string
+        id = payload.get("id", "ID no encontrado")  # Usar el método get para manejar la ausencia de 'id'
+        status = payload.get("status", "Status no encontrado")  # Usar el método get para manejar la ausencia de 'status'
+        print(f"Id: {id}, status: {status}")
+        return id, status
+    except json.JSONDecodeError:
+        # Manejar el error específico de decodificación de JSON
+        print("Error al decodificar JSON. Verifique el formato del mensaje.")
+        return None, None
+    except Exception as e:
+        # Manejar cualquier otro tipo de error
+        print(f"Error al procesar el mensaje: {e}")
+        return None, None
 
 # Función para enviar mensajes a Telegram
 def enviar_mensaje_telegram(id,mensaje):
