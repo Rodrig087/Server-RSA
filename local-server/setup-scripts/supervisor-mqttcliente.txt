@@ -1,0 +1,10 @@
+[program:mqttcliente]
+command=/usr/bin/python3 /home/rsa/desarrollo/MQTTCliente.py
+directory=/home/rsa/desarrollo/
+autostart=true
+autorestart=true
+startretries=3
+user=rsa
+stdout_logfile=/var/log/supervisor/mqttcliente.log
+stderr_logfile=/var/log/supervisor/mqttcliente_err.log
+environment=PYTHONPATH=/usr/bin/python3

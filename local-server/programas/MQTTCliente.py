@@ -1,6 +1,7 @@
 ######################################### ~Funciones~ #################################################
 import json
 import paho.mqtt.client as mqtt
+import time
 #######################################################################################################
 
 ##################################### ~Variables globales~ ############################################
@@ -10,74 +11,92 @@ variable = 0
 ######################################### ~Funciones~ #################################################
 # Funcion para leer el archivo de configuracion JSON
 def read_fileJSON(nameFile):
-    with open(nameFile, 'r') as f:
-        data = json.load(f)
-    return data 
-
-# Función para iniciar el cliente MQTT
-def iniciar_cliente_mqtt(username, password, server_address):
-    client = mqtt.Client()
-
-    # Establecer Last Will and Testament (LWT)
-    lwt_topic = "status/desconectado"  # Tópico LWT para notificar desconexiones
-    lwt_message = f"SER01"
-    client.will_set(lwt_topic, payload=lwt_message, qos=1, retain=False)
-
-    client.on_connect = on_connect
-    client.on_message = on_message
-    client.username_pw_set(username, password)
-    client.connect(server_address, 1883, 60)
-    # Publicar mensaje de inicio
-    publicar_mensaje(client, topic_status, "SER01")
-    client.loop_forever()
+    try:
+        with open(nameFile, 'r') as f:
+            data = json.load(f)
+        return data
+    except FileNotFoundError:
+        print(f"Archivo {nameFile} no encontrado.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error al decodificar el archivo {nameFile}.")
+        return None
 
 # Función que se llama cuando el cliente se conecta al broker
 def on_connect(client, userdata, flags, rc):
-    global topic_status, topic_desconexion
-    print("Conectado al broker MQTT con código de resultado: " + str(rc))
-    
-# Función que se llama cuando se recibe un mensaje del broker
-'''
-def on_message(client, userdata, msg):
-    # Determinar el tópico del mensaje recibido
-    if msg.topic == topic_conexion:
-        event = "conectado"
-    elif msg.topic == topic_desconexion:
-        event = "desconectado"
+    if rc == 0:
+        print("Conectado al broker MQTT con éxito.")
+        # Publicar mensaje "online" cuando se reconecta
+        if userdata['is_reconnecting']:
+            publicar_mensaje(client, userdata['config_mqtt']["topic_status"], userdata['dispositivo_id'], "online")
+            userdata['is_reconnecting'] = False
     else:
-        return  # Si el mensaje no es de los tópicos esperados, no hacer nada
-    
-    # Formatear la hora y fecha actuales
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Preparar y enviar el mensaje a Telegram
-    id_cliente = msg.payload.decode()  # Recupera el ID del cliente del contenido del mensaje
-    mensaje_telegram = f"{id_cliente} {event} a las {current_time}"
-    enviar_mensaje_telegram(id_grupo, mensaje_telegram)
-'''
+        print(f"Error al conectar al broker MQTT, código de resultado: {rc}")
 
-# Funcion para publicar mensajes por MQTT
-def publicar_mensaje(client, topic, mensaje):
-    client.publish(topic, mensaje)
+# Función que se llama cuando el cliente se desconecta del broker
+def on_disconnect(client, userdata, rc):
+    print("Desconectado del broker MQTT.")
+    userdata['is_reconnecting'] = True
+
+# Función para publicar mensajes por MQTT en formato JSON
+def publicar_mensaje(client, topic, id, mensaje):
+    mensaje_json = json.dumps({"id": id, "status": mensaje})
+    client.publish(topic, mensaje_json)
+
+# Función para iniciar el cliente MQTT
+def iniciar_cliente_mqtt(config_mqtt, dispositivo_id):
+    client = mqtt.Client(userdata={'config_mqtt': config_mqtt, 'dispositivo_id': dispositivo_id, 'is_reconnecting': False})
+    client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
+
+    # Crear el mensaje LWT en formato JSON
+    lwt_message = json.dumps({"id": dispositivo_id, "status": "offline"})
+    lwt_topic = "status"  # Tópico LWT para notificar desconexiones
+
+    # Establecer Last Will and Testament (LWT)
+    client.will_set(lwt_topic, payload=lwt_message, qos=1, retain=False)
+    
+    try:
+        client.username_pw_set(config_mqtt["username"], config_mqtt["password"])
+        client.connect(config_mqtt["server_address"], 1883, 60)
+
+        # Publicar mensaje de inicio
+        publicar_mensaje(client, config_mqtt["topic_status"], dispositivo_id, "on")
+
+        #client.loop_forever()
+        client.loop_start()
+        while True:
+            time.sleep(1)
+
+    except Exception as e:
+        print(f"Error al conectar o publicar en el broker MQTT: {e}")
+
 
 #######################################################################################################
 
 ############################################ ~Main~ ###################################################
 def main():
 
-    global client, topic_status, topic_desconexion
-
-    # Lee el archivo de configuracion mqtt
-    config_mqtt = read_fileJSON("/home/rsa/configuracion/mqtt-configuracion.json")
-    server_address = config_mqtt["server_address"]
-    username = config_mqtt["username"]
-    password = config_mqtt["password"]
-    topic_status = config_mqtt["topic_status"]
-
-    # Iniciar el cliente MQTT 
-    iniciar_cliente_mqtt(username, password, server_address)
-
+    config_mqtt_path = "/home/rsa/configuracion/mqtt-configuracion.json"
+    config_dispositivo_path = "/home/rsa/configuracion/dispositivo-configuracion.json"
     
+    # Lee el archivo de configuración MQTT
+    config_mqtt = read_fileJSON(config_mqtt_path)
+    if config_mqtt is None:
+        print("No se pudo leer el archivo de configuración. Terminando el programa.")
+        return
+    
+    # Lee el archivo de configuración del dispositivo
+    config_dispositivo = read_fileJSON(config_dispositivo_path)
+    if config_dispositivo is None:
+        print("No se pudo leer el archivo de configuración del dispositivo. Terminando el programa.")
+        return
+
+    # Obtiene el ID del dispositivo
+    dispositivo_id = config_dispositivo.get("dispositivo", {}).get("id", "Unknown")
+
+    iniciar_cliente_mqtt(config_mqtt, dispositivo_id)
+
 
 #######################################################################################################
 if __name__ == '__main__':
