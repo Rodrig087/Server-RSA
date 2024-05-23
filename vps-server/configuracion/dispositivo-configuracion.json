@@ -1,0 +1,8 @@
+{
+    "dispositivo": {
+        "id": "VPS"
+    },
+    "directorios": {
+        "logs-files-status": "/home/rsa/log-files/status/"
+    }
+}

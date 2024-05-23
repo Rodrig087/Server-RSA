@@ -2,9 +2,11 @@
 import json
 import telebot
 import paho.mqtt.client as mqtt
+import logging
 from threading import Thread
 import time
 import datetime
+import os
 #######################################################################################################
 
 ##################################### ~Variables globales~ ############################################
@@ -12,6 +14,8 @@ bot = None
 id_chat = None
 id_grupo = None
 topic_status = None
+log_directory = None
+loggers = {}
 #######################################################################################################
 
 ######################################### ~Funciones~ #################################################
@@ -74,28 +78,59 @@ def on_connect(client, userdata, flags, rc):
     else:
         print("Conexion fallida")
 
+# Función para inicializar y obtener el logger de un cliente
+def obtener_logger(id_cliente):
+    global log_directory, loggers
+    if id_cliente not in loggers:
+        # Crear un logger para el cliente
+        logger = logging.getLogger(id_cliente)
+        logger.setLevel(logging.DEBUG)
+        # Crear manejador de archivo
+        log_path = os.path.join(log_directory, f"{id_cliente}.log")
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setLevel(logging.DEBUG)
+        # Crear formato de logging y añadirlo al manejador
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        # Añadir el manejador al logger
+        logger.addHandler(file_handler)
+        loggers[id_cliente] = logger
+    return loggers[id_cliente]
+
+# Función para manejar y registrar los mensajes recibidos
+def manejar_mensaje(id_cliente, status_cliente):
+    logger = obtener_logger(id_cliente)
+    if status_cliente == "on":
+        event = "encendido"
+        logger.info("Encendido")
+    elif status_cliente == "online":
+        event = "conectado"
+        logger.info("Conectado")
+    elif status_cliente == "offline":
+        event = "desconectado"
+        logger.warning("Desconectado")
+    elif status_cliente == "disk_full":
+        event = "lleno"
+        logger.critical("Disco lleno")
+    else:
+        event = None
+
+    return event
+
 # Función que se llama cuando se recibe un mensaje del broker
 def on_message(client, userdata, msg):
     id_cliente, status_cliente = procesar_mensaje(msg)
     if id_cliente is None or status_cliente is None:
         return  # No hacer nada si hay un error en el procesamiento del mensaje
 
-    # Determinar el tópico del mensaje recibido
-    if status_cliente == "on":
-        event = "encendido"
-    elif status_cliente == "online":
-        event = "conectado"
-    elif status_cliente == "offline":
-        event = "desconectado"
-    else:
-        return  # Si el mensaje no es de los tópicos esperados, no hacer nada
-    
-    # Formatear la hora y fecha actuales
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Preparar y enviar el mensaje a Telegram
-    mensaje_telegram = f"{id_cliente} {event} a las {current_time}"
-    enviar_mensaje_telegram(id_grupo, mensaje_telegram)
+    event = manejar_mensaje(id_cliente, status_cliente)
+    if event:
+        # Formatear la hora y fecha actuales
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Preparar y enviar el mensaje a Telegram
+        mensaje_telegram = f"{id_cliente} {event} a las {current_time}"
+        enviar_mensaje_telegram(id_grupo, mensaje_telegram)
 
 # Función para iniciar el cliente MQTT
 def iniciar_cliente_mqtt(config_mqtt):
@@ -119,10 +154,11 @@ def iniciar_cliente_mqtt(config_mqtt):
 ############################################ ~Main~ ###################################################
 def main():
 
-    global topic_status, bot, id_chat, id_grupo
+    global topic_status, bot, id_chat, id_grupo, log_directory
 
     config_mqtt_path = "/home/rsa/configuracion/mqtt-configuracion.json"
     config_telegram_path = "/home/rsa/configuracion/telegram-configuracion.json"
+    config_dispositivo_path = "/home/rsa/configuracion/dispositivo-configuracion.json"
 
     # Lee el archivo de configuración MQTT
     config_mqtt = read_fileJSON(config_mqtt_path)
@@ -135,6 +171,19 @@ def main():
     if config_telegram is None:  # Verificar config_telegram en lugar de config_telegram_path
         print("No se pudo leer el archivo de configuración de Telegram. Terminando el programa.")
         return
+    
+    # Lee el archivo de configuración del dispositivo
+    config_dispositivo = read_fileJSON(config_dispositivo_path)
+    if config_dispositivo is None:
+        print("No se pudo leer el archivo de configuración del dispositivo. Terminando el programa.")
+        return
+    
+    # Obtiene el directorio de logs
+    log_directory = config_dispositivo["directorios"]["logs-files-status"]
+    # Crear el directorio de logs si no existe
+    if not os.path.exists(log_directory):
+        os.makedirs(log_directory)
+
         
     # Obtiene el token y los id de Telegram
     TOKEN = config_telegram.get("token", "Unknown")
@@ -153,7 +202,7 @@ def main():
 
     # Espera que el bot esté listo antes de enviar el mensaje inicial
     time.sleep(1)  # Asegura un pequeño delay para que el bot inicie correctamente
-    enviar_mensaje_telegram(id_grupo, "Server-Pi en linea")
+    enviar_mensaje_telegram(id_grupo, "VPS en linea")
 
     # Iniciar el cliente MQTT 
     client = iniciar_cliente_mqtt(config_mqtt)
